@@ -13,6 +13,8 @@ receive updates. The same flow runs after Remote installation completes.
 Archived titles are excluded; an interrupted/failed scan never replaces the
 server's previous snapshot. Sync failure leaves Remote browsing available and
 retries on the next open/refresh. No game files or save data are sent.
+The latest result (success/deferred, HTTP status and curl code only) is written
+to `sdmc:/switch/CyberFoil/inventory-sync.log`; each attempt replaces the file.
 
 `inventoryDeviceId` in the console config is a random, stable identity, unrelated
 to the console serial/MAC. The new POST uses the bundled Mozilla CA roots,

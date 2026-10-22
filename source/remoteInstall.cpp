@@ -5,6 +5,7 @@
 #include <cstring>
 #include <curl/curl.h>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <thread>
 #include <unordered_map>
@@ -2217,10 +2218,21 @@ namespace remoteInstStuff {
         return items;
     }
 
+    static void RecordInventoryStatus(const std::string& status)
+    {
+        // A bounded, credential-free result is available for hardware diagnostics.
+        std::ofstream log(inst::config::appDir + "/inventory-sync.log", std::ios::trunc);
+        log << status << '\n';
+        printf("[inventory] %s\n", status.c_str());
+    }
+
     static bool SendConsoleInventory(const std::string& baseUrl, const std::string& user,
                                      const std::string& pass, const std::string& payload)
     {
-        if (payload.empty() || payload.size() > 1024 * 1024) return false;
+        if (payload.empty() || payload.size() > 1024 * 1024) {
+            RecordInventoryStatus("scan unavailable; retaining previous server snapshot");
+            return false;
+        }
         const std::string url = baseUrl + "/api/console/inventory";
         CURL* curl = curl_easy_init();
         if (!curl) return false;
@@ -2263,7 +2275,8 @@ namespace remoteInstStuff {
         const bool ok = result == CURLE_OK && status >= 200 && status < 300 &&
             reply.is_object() && reply.value("success", false);
         // Do not log URLs, credentials, identities, inventory or response bodies.
-        printf("[inventory] sync %s (HTTP %ld, curl %d)\n", ok ? "complete" : "deferred", status, static_cast<int>(result));
+        RecordInventoryStatus(std::string("sync ") + (ok ? "complete" : "deferred") +
+            " (HTTP " + std::to_string(status) + ", curl " + std::to_string(static_cast<int>(result)) + ")");
         return ok;
     }
 
@@ -2329,7 +2342,7 @@ namespace remoteInstStuff {
                         if (ValidateRemoteResponse(refreshed, refreshError)) fetch = std::move(refreshed);
                     }
                 } catch (...) {
-                    printf("[inventory] scan unavailable; retaining previous server snapshot\n");
+                    RecordInventoryStatus("scan unavailable; retaining previous server snapshot");
                 }
             }
 
