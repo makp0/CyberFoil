@@ -35,7 +35,7 @@ namespace inst::inventory {
         std::map<std::uint64_t, std::uint32_t> titles;
         for (const auto& item : installed) {
             // Only application base IDs: never report system titles or patch/DLC rows as games.
-            if ((item.titleId >> 56) != 1 || item.titleId < 0x0100000000010000 || (item.titleId & 0xfff) != 0) continue;
+            if ((item.titleId >> 52) != 0x010 || item.titleId < 0x0100000000010000 || (item.titleId & 0xfff) != 0) continue;
             auto [it, added] = titles.emplace(item.titleId, item.version);
             if (!added) it->second = std::max(it->second, item.version);
         }

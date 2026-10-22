@@ -2090,7 +2090,7 @@ namespace inst::ui {
                 }
                 if (metaCount > 0) {
                     list.resize(static_cast<std::size_t>(metaCount));
-                    if (R_FAILED(nsListApplicationContentMetaStatus(baseId, 0, list.data(), metaCount, &metaOut))) {
+                    if (R_FAILED(nsListApplicationContentMetaStatus(baseId, 0, list.data(), metaCount, &metaOut)) || metaOut != metaCount) {
                         nsExit();
                         this->installedSnapshot = {};
                         return false;
@@ -2110,6 +2110,8 @@ namespace inst::ui {
 
                 this->installedSnapshot.installedBaseIds.push_back(baseId);
                 for (s32 j = 0; j < metaOut; j++) {
+                    if (list[j].storageID == NcmStorageId_None)
+                        continue;
                     if (list[j].meta_type == NcmContentMetaType_Patch) {
                         auto& version = this->installedSnapshot.installedUpdateVersion[baseId];
                         if (list[j].version > version)

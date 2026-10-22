@@ -1486,8 +1486,16 @@ namespace remoteInstStuff {
             }
 
             curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+            // A modern HTTPS capability must come from the configured origin.
+            // Never forward custom authentication headers through a redirect.
+            const bool verifiedHttps = !inst::config::remoteLegacyMode && url.rfind("https://", 0) == 0;
+            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, verifiedHttps ? 0L : 1L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, verifiedHttps ? 1L : 0L);
+            if (verifiedHttps) {
+                curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+                curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/certs/cacert.pem");
+                curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+            }
             const std::string userAgent = inst::config::remoteLegacyMode ? std::string() : inst::curl::getDefaultUserAgent();
             curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent.c_str());
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteToString);
@@ -1527,13 +1535,12 @@ namespace remoteInstStuff {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
             curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effectiveUrl);
             curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &contentType);
-            if (headerList)
-                curl_slist_free_all(headerList);
-            curl_easy_cleanup(curl);
-
             result.responseCode = responseCode;
             result.effectiveUrl = effectiveUrl ? effectiveUrl : "";
             result.contentType = contentType ? contentType : "";
+            if (headerList)
+                curl_slist_free_all(headerList);
+            curl_easy_cleanup(curl);
 
             if (rc != CURLE_OK) {
                 result.error = std::string(curl_easy_strerror(rc)) + " (curl=" + std::to_string(static_cast<int>(rc)) + ")";
