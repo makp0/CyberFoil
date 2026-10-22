@@ -47,7 +47,7 @@ namespace remoteInstStuff {
     };
 
     std::vector<RemoteItem> FetchRemote(const std::string& remoteUrl, const std::string& user, const std::string& pass, std::string& error, const RemoteFetchProgressCallback& progressCb = RemoteFetchProgressCallback());
-    std::vector<RemoteSection> FetchRemoteSections(const std::string& remoteUrl, const std::string& user, const std::string& pass, std::string& error, bool* outUsedLegacyFallback = nullptr, const RemoteFetchProgressCallback& progressCb = RemoteFetchProgressCallback());
+    std::vector<RemoteSection> FetchRemoteSections(const std::string& remoteUrl, const std::string& user, const std::string& pass, std::string& error, bool* outUsedLegacyFallback = nullptr, const RemoteFetchProgressCallback& progressCb = RemoteFetchProgressCallback(), const std::function<std::string()>& inventoryProvider = {}, bool* outInventorySupported = nullptr);
     std::string FetchRemoteMotd(const std::string& remoteUrl, const std::string& user, const std::string& pass);
     std::string GetRemoteApiPrefix();
     bool DownloadCheatText(const RemoteItem& item, const std::string& user, const std::string& pass, std::string& text, std::string& error);

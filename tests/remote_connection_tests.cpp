@@ -144,6 +144,7 @@ static void PersistenceTests() {
     active.connection = "auto";
     Check(cfg::SaveRemote(active) && cfg::SetActiveRemote(active, false), "activate dual endpoint Auto profile");
     cfg::remoteUrl = active.wanUrl; // Runtime connection selected WAN.
+    cfg::inventoryDeviceId = std::string(32, 'a');
     cfg::setConfig();
     std::ifstream configFile(cfg::configPath);
     nlohmann::json configJson; configFile >> configJson; configFile.close();
@@ -151,6 +152,7 @@ static void PersistenceTests() {
         "runtime WAN selection does not overwrite persisted profile preference");
     for (int i = 0; i < 3; ++i) {
         cfg::parseConfig();
+        Check(cfg::inventoryDeviceId == std::string(32, 'a'), "inventory identity survives repeated startup");
         Check(cfg::LoadRemotes().size() == 2 && cfg::remoteProfileFile == active.fileName,
             "repeated startup does not generate remote duplicates");
     }

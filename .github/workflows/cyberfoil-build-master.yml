@@ -1,9 +1,11 @@
 name: Build CyberFoil (master)
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - master
+      - codex/console-inventory
   pull_request:
     branches:
       - master
@@ -12,7 +14,13 @@ permissions:
   contents: read
 
 jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make -C tests test
   build:
+    needs: host-tests
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkita64:latest
@@ -69,7 +77,7 @@ jobs:
           set -euo pipefail
           start_ts=$(date +%s)
           dkp-pacman -S --noconfirm --needed switch-ntfs-3g switch-lwext4
-          make -j"$(nproc)" RELEASE=1
+          make -j"$(nproc)" RELEASE=1 APP_VERSION=1.5.0-inventory1
 
           end_ts=$(date +%s)
           duration=$((end_ts - start_ts))

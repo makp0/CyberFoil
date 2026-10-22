@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <unordered_map>
 #include <unordered_set>
@@ -15,6 +16,7 @@
 #include "ui/remoteInstPage.hpp"
 #include "ui/overflowText.hpp"
 #include "util/config.hpp"
+#include "util/console_inventory.hpp"
 #include "util/remote_connection.hpp"
 #include "util/curl.hpp"
 #include "cheat_manager.hpp"
@@ -2062,7 +2064,12 @@ namespace inst::ui {
             NsApplicationRecord records[chunk];
             s32 outCount = 0;
             rc = nsListApplicationRecord(records, chunk, offset, &outCount);
-            if (R_FAILED(rc) || outCount <= 0)
+            if (R_FAILED(rc)) {
+                nsExit();
+                this->installedSnapshot = {};
+                return false;
+            }
+            if (outCount <= 0)
                 break;
 
             for (s32 i = 0; i < outCount; i++) {
@@ -2076,10 +2083,18 @@ namespace inst::ui {
                 // control data but loses its content meta, so it now reads as not installed.
                 s32 metaCount = 0;
                 s32 metaOut = 0;
-                if (R_SUCCEEDED(nsCountApplicationContentMeta(baseId, &metaCount)) && metaCount > 0) {
+                if (R_FAILED(nsCountApplicationContentMeta(baseId, &metaCount))) {
+                    nsExit();
+                    this->installedSnapshot = {};
+                    return false;
+                }
+                if (metaCount > 0) {
                     list.resize(static_cast<std::size_t>(metaCount));
-                    if (R_FAILED(nsListApplicationContentMetaStatus(baseId, 0, list.data(), metaCount, &metaOut)))
-                        metaOut = 0;
+                    if (R_FAILED(nsListApplicationContentMetaStatus(baseId, 0, list.data(), metaCount, &metaOut))) {
+                        nsExit();
+                        this->installedSnapshot = {};
+                        return false;
+                    }
                 }
 
                 bool installed = false;
@@ -3889,6 +3904,7 @@ namespace inst::ui {
 
         const std::string cacheKey = remoteUrl + "\n" + inst::config::remoteUser + "\n" + inst::config::remotePass + "\n" + (inst::config::remoteLegacyMode ? "1" : "0");
         const bool canUseCatalogCache = !forceRefresh
+            && !this->catalogCacheInventorySupported
             && this->catalogCacheValid
             && this->catalogCacheKey == cacheKey
             && !this->catalogCacheSections.empty()
@@ -3905,6 +3921,7 @@ namespace inst::ui {
             std::vector<remoteInstStuff::RemoteSection> fetchedSections;
             std::string fetchError;
             bool fetchUsedLegacyFallback = false;
+            bool fetchInventorySupported = false;
 
             std::thread fetchThread([&]() {
                 auto fetchProgressCb = [&](std::uint64_t downloaded, std::uint64_t total) {
@@ -3917,7 +3934,35 @@ namespace inst::ui {
                     inst::config::remotePass,
                     fetchError,
                     &fetchUsedLegacyFallback,
-                    fetchProgressCb
+                    fetchProgressCb,
+                    [&]() -> std::string {
+                        this->installedSnapshot = {};
+                        if (!this->buildInstalledSnapshot()) return {};
+                        if (!inst::inventory::ValidDeviceId(inst::config::inventoryDeviceId)) {
+                            std::uint8_t bytes[16];
+                            randomGet(bytes, sizeof(bytes));
+                            static constexpr char hex[] = "0123456789abcdef";
+                            inst::config::inventoryDeviceId.clear();
+                            for (auto byte : bytes) {
+                                inst::config::inventoryDeviceId += hex[byte >> 4];
+                                inst::config::inventoryDeviceId += hex[byte & 15];
+                            }
+                            inst::config::setConfig();
+                            std::ifstream saved(inst::config::configPath);
+                            const auto config = nlohmann::json::parse(saved, nullptr, false);
+                            if (!config.is_object() || config.value("inventoryDeviceId", std::string()) != inst::config::inventoryDeviceId) {
+                                inst::config::inventoryDeviceId.clear();
+                                return {};
+                            }
+                        }
+                        std::vector<inst::inventory::InstalledTitle> titles;
+                        for (auto id : this->installedSnapshot.installedBaseIds) {
+                            auto version = this->installedSnapshot.installedUpdateVersion.find(id);
+                            titles.push_back({id, version == this->installedSnapshot.installedUpdateVersion.end() ? 0 : version->second});
+                        }
+                        return inst::inventory::Payload(inst::config::inventoryDeviceId, titles);
+                    },
+                    &fetchInventorySupported
                 );
                 fetchDone.store(true, std::memory_order_release);
             });
@@ -3994,6 +4039,7 @@ namespace inst::ui {
                 this->catalogCacheValid = true;
                 this->catalogCacheKey = cacheKey;
                 this->catalogCacheUsedLegacyFallback = usedLegacyFallback;
+                this->catalogCacheInventorySupported = fetchInventorySupported;
                 this->catalogCacheSections = this->remoteSections;
             }
         }
@@ -4179,6 +4225,10 @@ namespace inst::ui {
     }
 
     void remoteInstPage::refreshAfterInstall() {
+        if (this->catalogCacheInventorySupported) {
+            this->startRemote(true);
+            return;
+        }
         if (this->remoteSections.empty() || this->activeRemoteUrl.empty()) {
             this->startRemote(true);
             return;

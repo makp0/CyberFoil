@@ -28,6 +28,7 @@ namespace inst::config {
     extern std::string offlineDbManifestUrl;
     extern std::string remoteUrl;
     extern std::string remoteProfileFile;
+    extern std::string inventoryDeviceId;
     extern std::string remoteUser;
     extern std::string remotePass;
     extern std::string httpUserAgentMode;

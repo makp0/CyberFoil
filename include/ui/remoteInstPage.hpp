@@ -86,6 +86,7 @@ namespace inst::ui {
             std::string sessionRemoteKey;
             bool catalogCacheValid = false;
             bool catalogCacheUsedLegacyFallback = false;
+            bool catalogCacheInventorySupported = false;
             std::string catalogCacheKey;
             std::vector<remoteInstStuff::RemoteSection> catalogCacheSections;
             BrowseSortMode browseSortMode = BrowseSortMode::Default;

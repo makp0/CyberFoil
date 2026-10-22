@@ -16,6 +16,7 @@ namespace inst::config {
     std::string offlineDbManifestUrl;
     std::string remoteUrl;
     std::string remoteProfileFile;
+    std::string inventoryDeviceId;
     std::string remoteUser;
     std::string remotePass;
     std::string httpUserAgentMode;
@@ -920,6 +921,7 @@ namespace inst::config {
             {"offlineDbManifestUrl", offlineDbManifestUrl},
             {"remoteUrl", persistedRemoteUrl},
             {"remoteProfileFile", remoteProfileFile},
+            {"inventoryDeviceId", inventoryDeviceId},
             {"remoteUser", remoteUser},
             {"remotePass", remotePass},
             {"httpUserAgentMode", httpUserAgentMode},
@@ -958,6 +960,7 @@ namespace inst::config {
         offlineDbManifestUrl = "https://github.com/luketanti/CyberFoil-DB/releases/latest/download/offline_db_manifest.json";
         remoteUrl.clear();
         remoteProfileFile.clear();
+        inventoryDeviceId.clear();
         remoteUser.clear();
         remotePass.clear();
         httpUserAgentMode = "default";
@@ -997,6 +1000,7 @@ namespace inst::config {
             if (j.contains("offlineDbManifestUrl")) offlineDbManifestUrl = j["offlineDbManifestUrl"].get<std::string>();
             if (j.contains("remoteUrl")) remoteUrl = j["remoteUrl"].get<std::string>();
             if (j.contains("remoteProfileFile")) remoteProfileFile = j["remoteProfileFile"].get<std::string>();
+            if (j.contains("inventoryDeviceId") && j["inventoryDeviceId"].is_string()) inventoryDeviceId = j["inventoryDeviceId"].get<std::string>();
             if (j.contains("remoteUser")) remoteUser = j["remoteUser"].get<std::string>();
             if (j.contains("remotePass")) remotePass = j["remotePass"].get<std::string>();
             if (j.contains("httpUserAgentMode")) {
@@ -1032,6 +1036,7 @@ namespace inst::config {
                 "offlineDbManifestUrl",
                 "remoteUrl",
                 "remoteProfileFile",
+                "inventoryDeviceId",
                 "remoteUser",
                 "remotePass",
                 "httpUserAgentMode",

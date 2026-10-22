@@ -27,6 +27,7 @@
 #include "ui/MainApplication.hpp"
 #include "ui/instPage.hpp"
 #include "util/config.hpp"
+#include "util/console_inventory.hpp"
 #include "util/curl.hpp"
 #include "util/error.hpp"
 #include "util/hauth.hpp"
@@ -2216,12 +2217,64 @@ namespace remoteInstStuff {
         return items;
     }
 
-    std::vector<RemoteSection> FetchRemoteSections(const std::string& remoteUrl, const std::string& user, const std::string& pass, std::string& error, bool* outUsedLegacyFallback, const RemoteFetchProgressCallback& progressCb)
+    static bool SendConsoleInventory(const std::string& baseUrl, const std::string& user,
+                                     const std::string& pass, const std::string& payload)
+    {
+        if (payload.empty() || payload.size() > 1024 * 1024) return false;
+        const std::string url = baseUrl + "/api/console/inventory";
+        CURL* curl = curl_easy_init();
+        if (!curl) return false;
+        std::string response;
+        const auto write = +[](char* data, size_t size, size_t count, void* state) -> size_t {
+            auto& text = *static_cast<std::string*>(state);
+            const size_t length = size * count;
+            if (length > 16384 || text.size() > 16384 - length) return 0;
+            text.append(data, length);
+            return length;
+        };
+        curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+        // Inventory is private. Never follow a redirect or use the legacy shop TLS bypass.
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, "romfs:/certs/cacert.pem");
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 3000L);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 8000L);
+        curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.data());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payload.size()));
+        const std::string auth = user + ":" + pass;
+        curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+        curl_easy_setopt(curl, CURLOPT_USERPWD, auth.c_str());
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, "CyberFoil-inventory/1");
+        struct curl_slist* headers = nullptr;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        for (const auto& header : BuildLegacyHeaders(url, user, pass)) headers = curl_slist_append(headers, header.c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        const CURLcode result = curl_easy_perform(curl);
+        long status = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        const auto reply = nlohmann::json::parse(response, nullptr, false);
+        const bool ok = result == CURLE_OK && status >= 200 && status < 300 &&
+            reply.is_object() && reply.value("success", false);
+        // Do not log URLs, credentials, identities, inventory or response bodies.
+        printf("[inventory] sync %s (HTTP %ld, curl %d)\n", ok ? "complete" : "deferred", status, static_cast<int>(result));
+        return ok;
+    }
+
+    std::vector<RemoteSection> FetchRemoteSections(const std::string& remoteUrl, const std::string& user, const std::string& pass, std::string& error, bool* outUsedLegacyFallback, const RemoteFetchProgressCallback& progressCb, const std::function<std::string()>& inventoryProvider, bool* outInventorySupported)
     {
         std::vector<RemoteSection> sections;
         error.clear();
         if (outUsedLegacyFallback)
             *outUsedLegacyFallback = false;
+        if (outInventorySupported)
+            *outInventorySupported = false;
 
         std::string baseUrl = NormalizeRemoteUrl(remoteUrl);
         if (baseUrl.empty()) {
@@ -2263,6 +2316,21 @@ namespace remoteInstStuff {
                         error += "\nHTTP " + std::to_string(fetch.responseCode);
                 }
                 return false;
+            }
+
+            const auto envelope = nlohmann::json::parse(fetch.body, nullptr, false);
+            if (inst::inventory::Supported(envelope, baseUrl, user, pass, inst::config::remoteLegacyMode)) {
+                if (outInventorySupported) *outInventorySupported = true;
+                // Runs on the catalog worker. Even an empty catalog must receive console-only titles.
+                try {
+                    if (inventoryProvider && SendConsoleInventory(baseUrl, user, pass, inventoryProvider())) {
+                        auto refreshed = FetchRemoteResponse(sectionsUrl, user, pass, progressCb);
+                        std::string refreshError;
+                        if (ValidateRemoteResponse(refreshed, refreshError)) fetch = std::move(refreshed);
+                    }
+                } catch (...) {
+                    printf("[inventory] scan unavailable; retaining previous server snapshot\n");
+                }
             }
 
             std::string parseError;

@@ -1,4 +1,29 @@
 # CyberFoil
+
+## Console inventory integration (makp0 fork)
+
+This fork sends a complete installed-game/version snapshot to an authenticated
+HTTPS AeroFoil Remote only when its modern sections response advertises
+`"capabilities": {"console_inventory": 1}`. Legacy mode, HTTP remotes,
+unauthenticated remotes and older servers never receive inventory.
+
+Opening or explicitly refreshing Remote scans the console, posts metadata to
+`/api/console/inventory`, then reloads the catalog so console-only games can
+receive updates. The same flow runs after Remote installation completes.
+Archived titles are excluded; an interrupted/failed scan never replaces the
+server's previous snapshot. Sync failure leaves Remote browsing available and
+retries on the next open/refresh. No game files or save data are sent.
+
+`inventoryDeviceId` in the console config is a random, stable identity, unrelated
+to the console serial/MAC. The new POST uses the bundled Mozilla CA roots,
+verifies TLS certificates and hostnames, does not follow redirects, and is
+bounded to eight seconds. Refresh the bundled CA roots when maintaining builds.
+Do not share your private Remote credential files or console config.
+
+Host protocol and configuration tests run with `make -C tests test`.
+The fork's master build workflow also accepts `workflow_dispatch` and publishes
+the actual Switch `cyberfoil.nro` as a GitHub Actions artifact.
+
 [![Latest version](https://img.shields.io/github/v/release/luketanti/CyberFoil?label=version)](https://github.com/luketanti/CyberFoil/releases/latest)
 ![GitHub all releases downloads](https://img.shields.io/github/downloads/luketanti/CyberFoil/total)
 ![GitHub latest release downloads](https://img.shields.io/github/downloads/luketanti/CyberFoil/latest/total)

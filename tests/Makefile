@@ -5,6 +5,8 @@ ROOT := ..
 OUT ?= /tmp/cyberfoil-lan-discovery-tests
 .PHONY: test
 test:
+	$(CXX) $(CXXFLAGS) -I$(ROOT)/include console_inventory_tests.cpp -o $(OUT)-inventory
+	$(OUT)-inventory
 	$(CXX) $(CXXFLAGS) -I$(ROOT)/include ui_dispatcher_tests.cpp -o $(OUT)-ui
 	$(OUT)-ui
 	$(CXX) $(CXXFLAGS) -I$(ROOT)/include install_queue_tests.cpp -o $(OUT)-queue
